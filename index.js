@@ -5,7 +5,7 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const allowedOrigins = ["http://localhost:5173", "https://tommylam.github.io"];
+const allowedOrigins = ["http://localhost:5173", "https://tommylay1.github.io"];
 
 app.use(
     cors({
@@ -30,82 +30,38 @@ async function fetchNYTData() {
             }
         );
 
-        let chunks = [];
-        for await (const chunk of response.body) {
-            chunks.push(Buffer.from(chunk));
-        }
-        const html = Buffer.concat(chunks).toString("utf8");
+        const html = await response.text();
+        console.log("Fetched HTML length:", html.length);
 
-        // Look for data markers
         const startMarker = "window.gameData = ";
+        const endMarker = ";</script>";
+
         const dataStart = html.indexOf(startMarker);
-        if (dataStart === -1)
-            throw new Error("Could not find data start marker");
+        if (dataStart === -1) throw new Error("Could not find data start");
 
-        // Find the end of the JSON by searching for semicolon
-        const contentStart = dataStart + startMarker.length;
-        let content = "";
-        let bracketCount = 0;
-        let inString = false;
-        let escapeNext = false;
+        const searchStart = dataStart + startMarker.length;
+        const dataEnd = html.indexOf(endMarker, searchStart);
+        if (dataEnd === -1) throw new Error("Could not find data end");
 
-        for (let i = contentStart; i < html.length; i++) {
-            const char = html[i];
-
-            if (escapeNext) {
-                escapeNext = false;
-                content += char;
-                continue;
-            }
-
-            if (char === "\\") {
-                escapeNext = true;
-                content += char;
-                continue;
-            }
-
-            if (char === '"' && !escapeNext) {
-                inString = !inString;
-            }
-
-            if (!inString) {
-                if (char === "{") bracketCount++;
-                if (char === "}") bracketCount--;
-
-                // We've found the end of the JSON when brackets balance and we hit a semicolon
-                if (bracketCount === 0 && char === ";") {
-                    break;
-                }
-            }
-
-            content += char;
-        }
+        const jsonStr = html.substring(searchStart, dataEnd);
+        console.log("Extracted JSON length:", jsonStr.length);
 
         try {
-            // Clean any potential trailing characters
-            content = content.replace(/;$/, "").trim();
-            const gameData = JSON.parse(content);
-
-            // Validate the data
-            if (
-                !gameData.sides ||
-                !Array.isArray(gameData.sides) ||
-                gameData.sides.length !== 4
-            ) {
-                throw new Error("Invalid sides data");
-            }
-            if (!gameData.ourSolution || !Array.isArray(gameData.ourSolution)) {
-                throw new Error("Invalid solution data");
-            }
-            if (!gameData.dictionary || !Array.isArray(gameData.dictionary)) {
-                throw new Error("Invalid dictionary data");
-            }
-
+            const gameData = JSON.parse(jsonStr);
+            console.log("Successfully parsed game data");
             return gameData;
         } catch (parseError) {
-            console.error("Parse error:", parseError);
-            console.error("Content preview:", content.substring(0, 100));
-            throw new Error(`JSON parse error: ${parseError.message}`);
+            const firstErrorPos =
+                parseError.message.match(/position (\d+)/)?.[1];
+            const problemArea = firstErrorPos
+                ? jsonStr.substring(
+                      Math.max(0, Number(firstErrorPos) - 50),
+                      Math.min(jsonStr.length, Number(firstErrorPos) + 50)
+                  )
+                : "No position info";
+
+            console.error("Parse Error near:", problemArea);
+            throw parseError;
         }
     } catch (error) {
         console.error("Fetch error:", error);
@@ -113,8 +69,8 @@ async function fetchNYTData() {
     }
 }
 
-// Better debug endpoint
-app.get("/api/debug-content", async (req, res) => {
+// New debug endpoint that shows chunks of data
+app.get("/api/debug-chunks", async (req, res) => {
     try {
         const response = await fetch(
             "https://www.nytimes.com/puzzles/letter-boxed",
@@ -126,20 +82,39 @@ app.get("/api/debug-content", async (req, res) => {
             }
         );
 
-        let chunks = [];
-        for await (const chunk of response.body) {
-            chunks.push(Buffer.from(chunk));
-        }
-        const html = Buffer.concat(chunks).toString("utf8");
-
+        const html = await response.text();
         const startMarker = "window.gameData = ";
         const dataStart = html.indexOf(startMarker);
-        const preview = html.substring(dataStart, dataStart + 200);
+
+        if (dataStart === -1) {
+            return res.json({ error: "Data start not found" });
+        }
+
+        const jsonStart = dataStart + startMarker.length;
+        const chunks = [];
+        let currentPos = jsonStart;
+        let bracketCount = 1; // Start at 1 because we expect to start with an opening bracket
+
+        // Read until we find the matching closing bracket
+        while (bracketCount > 0 && currentPos < html.length) {
+            const char = html[currentPos];
+            if (char === "{") bracketCount++;
+            if (char === "}") bracketCount--;
+            currentPos++;
+        }
+
+        const jsonStr = html.substring(jsonStart, currentPos);
 
         res.json({
-            found: dataStart !== -1,
-            startIndex: dataStart,
-            contentPreview: preview,
+            totalLength: html.length,
+            dataStartIndex: dataStart,
+            extractedLength: jsonStr.length,
+            // Show the first and last 100 characters of the extracted JSON
+            start: jsonStr.substring(0, 100),
+            end: jsonStr.substring(jsonStr.length - 100),
+            // Add some debug counts
+            openBrackets: (jsonStr.match(/{/g) || []).length,
+            closeBrackets: (jsonStr.match(/}/g) || []).length,
             timestamp: new Date().toISOString(),
         });
     } catch (error) {
