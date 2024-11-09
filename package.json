@@ -1,0 +1,23 @@
+{
+    "name": "letterboxed-solver-backend",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "express": "^4.21.1",
+        "node-fetch": "^3.3.2",
+        "puppeteer": "^23.7.1"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.1"
+    },
+    "main": "index.js",
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": ""
+}
