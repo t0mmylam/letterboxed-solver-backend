@@ -1,20 +1,32 @@
 import express from 'express'
 import cors from 'cors'
 import fetch from 'node-fetch'
+import express from 'express'
+import cors from 'cors'
+import fetch from 'node-fetch'
+
+const app = express()
+const PORT = process.env.PORT || 3000
 
 const app = express()
 const PORT = process.env.PORT || 3000
 
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://tommylam.github.io'
+  'https://tommylay1.github.io'
 ];
 
 app.use(cors({
   origin: allowedOrigins
 }));
 
+app.use(cors({
+  origin: allowedOrigins
+}));
+
 let cache = {
+  data: null,
+  date: null
   data: null,
   date: null
 }
@@ -177,5 +189,6 @@ function isCacheValid() {
 }
 
 app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
   console.log(`Server running on port ${PORT}`);
 });
